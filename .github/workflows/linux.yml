@@ -149,7 +149,7 @@ jobs:
           path: /tmp/tinygo_${{ steps.version.outputs.version }}_amd64.deb
           archive: false
   test-linux-build:
-    # Test the binaries built in the build-linux job by running the smoke tests.
+    # Test the binaries built in the build-linux job.
     runs-on: ubuntu-latest
     needs: build-linux
     steps:
@@ -180,7 +180,44 @@ jobs:
       - run: make tinygo-test-wasip1-fast
       - run: make tinygo-test-wasip2-fast
       - run: make tinygo-test-wasm
-      - run: make smoketest
+
+  smoketest-linux-build:
+    # Run release tarball smoke tests in shards to reduce CI wall-clock time.
+    runs-on: ubuntu-latest
+    needs: build-linux
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - smoketest-core
+          - smoketest-examples-basic
+          - smoketest-boards-nrf-samd
+          - smoketest-boards-rp
+          - smoketest-boards-avr
+          - smoketest-boards-esp
+          - smoketest-flags-cgo-cross
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+      - name: Download release artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: tinygo${{ needs.build-linux.outputs.version }}.linux-amd64.tar.gz
+      - name: Extract release tarball
+        run: |
+          mkdir -p ~/lib
+          tar -C ~/lib -xf tinygo${{ needs.build-linux.outputs.version }}.linux-amd64.tar.gz
+          ln -s ~/lib/tinygo/bin/tinygo ~/go/bin/tinygo
+      - name: Smoke test ${{ matrix.shard }}
+        run: make ${{ matrix.shard }}
+
   assert-test-linux:
     # Run all tests that can run on Linux, with LLVM assertions enabled to catch
     # potential bugs.
@@ -279,13 +316,65 @@ jobs:
         run: |
           make ASSERT=1
           echo "$(pwd)/build" >> $GITHUB_PATH
+      - name: Publish ASSERT build artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: tinygo-linux-assert
+          path: |
+            build/tinygo
+            build/wasm-opt
       - name: Test stdlib packages
         run: make tinygo-test
-      - run: make smoketest
       - run: make wasmtest
       - run: make tinygo-test-baremetal
       - name: Check Go code formatting
         run: make fmt-check lint
+
+  smoketest-linux-assert:
+    # Run ASSERT-enabled smoke tests in shards to reduce CI wall-clock time.
+    runs-on: ubuntu-latest
+    needs: assert-test-linux
+    strategy:
+      fail-fast: false
+      matrix:
+        shard:
+          - smoketest-core
+          - smoketest-examples-basic
+          - smoketest-boards-nrf-samd
+          - smoketest-boards-rp
+          - smoketest-boards-avr
+          - smoketest-boards-esp
+          - smoketest-flags-cgo-cross
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Install apt dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends \
+              qemu-system-arm \
+              qemu-system-riscv32 \
+              qemu-user \
+              simavr
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+      - name: Download ASSERT build
+        uses: actions/download-artifact@v8
+        with:
+          name: tinygo-linux-assert
+          path: build/
+      - name: Prepare ASSERT build
+        run: |
+          chmod +x build/tinygo
+          if [ -f build/wasm-opt ]; then chmod +x build/wasm-opt; fi
+      - name: Smoke test ${{ matrix.shard }}
+        run: make ${{ matrix.shard }} TINYGO=$(PWD)/build/tinygo
+
   build-linux-cross:
     # Build ARM Linux binaries, ready for release.
     # This intentionally uses an older Linux image, so that we compile against
