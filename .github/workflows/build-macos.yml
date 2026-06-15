@@ -103,7 +103,6 @@ jobs:
         with:
           name: tinygo-darwin-${{ matrix.goarch }}-ci
           path: build/release.tar.gz
-          archive: false
       - name: Make release artifact
         run: cp -p build/release.tar.gz build/tinygo${{ steps.version.outputs.version }}.darwin-${{ matrix.goarch }}.tar.gz
       - name: Publish release artifact
@@ -155,7 +154,7 @@ jobs:
       - name: Extract TinyGo build
         run: tar -C build -xf build/release.tar.gz
       - name: Smoke test ${{ matrix.shard }}
-        run: make ${{ matrix.shard }} TINYGO=$(PWD)/build/tinygo/bin/tinygo
+        run: make ${{ matrix.shard }} TINYGO=$PWD/build/tinygo/bin/tinygo
 
   test-macos-homebrew:
     name: homebrew-install

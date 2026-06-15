@@ -373,7 +373,7 @@ jobs:
           chmod +x build/tinygo
           if [ -f build/wasm-opt ]; then chmod +x build/wasm-opt; fi
       - name: Smoke test ${{ matrix.shard }}
-        run: make ${{ matrix.shard }} TINYGO=$(PWD)/build/tinygo
+        run: make ${{ matrix.shard }} TINYGO=$PWD/build/tinygo
 
   build-linux-cross:
     # Build ARM Linux binaries, ready for release.
