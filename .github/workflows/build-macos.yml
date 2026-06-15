@@ -112,9 +112,23 @@ jobs:
           path: build/tinygo${{ steps.version.outputs.version }}.darwin-${{ matrix.goarch }}.tar.gz
           archive: false
 
+  smoketest-shards:
+    name: smoketest-shards
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.list.outputs.shards }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: List smoke test shards
+        id: list
+        run: |
+          shards="$(make --no-print-directory list-smoketest-shards | python3 -c 'import json, sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))')"
+          echo "shards=$shards" >> "$GITHUB_OUTPUT"
+
   smoketest-macos:
     name: smoketest-macos
-    needs: build-macos
+    needs: [build-macos, smoketest-shards]
     strategy:
       fail-fast: false
       matrix:
@@ -122,14 +136,7 @@ jobs:
         # macos-15-intel: amd64 (last intel version to be supported by github runners)
         # See https://github.com/actions/runner-images/issues/13046
         os: [macos-14, macos-15-intel]
-        shard:
-          - smoketest-core
-          - smoketest-examples-basic
-          - smoketest-boards-nrf-samd
-          - smoketest-boards-rp
-          - smoketest-boards-avr
-          - smoketest-boards-esp
-          - smoketest-flags-cgo-cross
+        shard: ${{ fromJSON(needs.smoketest-shards.outputs.shards) }}
         include:
           - os: macos-14
             goarch: arm64
@@ -137,6 +144,9 @@ jobs:
             goarch: amd64
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Install Dependencies
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install qemu binaryen
       - name: Checkout
         uses: actions/checkout@v6
         with:
@@ -154,7 +164,9 @@ jobs:
       - name: Extract TinyGo build
         run: tar -C build -xf build/release.tar.gz
       - name: Smoke test ${{ matrix.shard }}
-        run: make ${{ matrix.shard }} TINYGO=$PWD/build/tinygo/bin/tinygo
+        run: |
+          export TINYGOROOT=$PWD/build/tinygo
+          make ${{ matrix.shard }} TINYGO=$TINYGOROOT/bin/tinygo
 
   test-macos-homebrew:
     name: homebrew-install

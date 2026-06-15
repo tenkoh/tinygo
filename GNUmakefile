@@ -592,7 +592,10 @@ SMOKETEST_SHARDS = \
 	smoketest-flags-cgo-cross \
 	$(nil)
 
-.PHONY: smoketest $(SMOKETEST_SHARDS)
+.PHONY: smoketest list-smoketest-shards $(SMOKETEST_SHARDS)
+list-smoketest-shards:
+	@printf '%s\n' $(SMOKETEST_SHARDS)
+
 smoketest: $(SMOKETEST_SHARDS)
 
 smoketest-core: testchdir
