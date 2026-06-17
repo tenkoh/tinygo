@@ -582,8 +582,23 @@ testchdir:
 	EXPECT_DIR=$(PWD)/tests/testing/chdir $(TINYGO) run -C tests/testing/chdir chdir.go
 	EXPECT_DIR=$(PWD) $(TINYGO) run ./tests/testing/chdir/chdir.go
 
-.PHONY: smoketest
-smoketest: testchdir
+SMOKETEST_SHARDS = \
+	smoketest-core \
+	smoketest-examples-basic \
+	smoketest-boards-nrf-samd \
+	smoketest-boards-rp \
+	smoketest-boards-avr \
+	smoketest-boards-esp \
+	smoketest-flags-cgo-cross \
+	$(nil)
+
+.PHONY: smoketest list-smoketest-shards $(SMOKETEST_SHARDS)
+list-smoketest-shards:
+	@printf '%s\n' $(SMOKETEST_SHARDS)
+
+smoketest: $(SMOKETEST_SHARDS)
+
+smoketest-core: testchdir
 	$(TINYGO) version
 	$(TINYGO) targets > /dev/null
 	# regression test for #2892
@@ -592,6 +607,8 @@ smoketest: testchdir
 	cd tests/text/template/smoke && $(TINYGO) test -c && rm -f smoke.test
 	# regression test for #2563
 	cd tests/os/smoke && $(TINYGO) test -c -target=pybadge && rm smoke.test
+
+smoketest-examples-basic:
 	# test all examples (except pwm)
 	$(TINYGO) build -size short -o test.hex -target=pga2350             examples/echo
 	@$(MD5SUM) test.hex
@@ -666,6 +683,8 @@ ifneq ($(WASM), 0)
 	GOOS=js GOARCH=wasm $(TINYGO) build -size short -o test.wasm -tags=xiao_esp32s3         examples/blinky1
 	@$(MD5SUM) test.wasm
 endif
+
+smoketest-boards-nrf-samd::
 	# test all targets/boards
 	$(TINYGO) build -size short -o test.hex -target=pca10040-s132v6     examples/blinky1
 	@$(MD5SUM) test.hex
@@ -787,6 +806,8 @@ endif
 	@$(MD5SUM) test.hex
 	$(TINYGO) build -size short -o test.hex -target=arduino-mkrwifi1010 examples/blinky1
 	@$(MD5SUM) test.hex
+
+smoketest-boards-rp:
 	$(TINYGO) build -size short -o test.hex -target=pico                examples/blinky1
 	@$(MD5SUM) test.hex
 	$(TINYGO) build -size short -o test.hex -target=pico -gc=leaking    examples/blinky1
@@ -841,6 +862,8 @@ endif
 	@$(MD5SUM) test.hex
 	$(TINYGO) build -size short -o test.hex -target=xiao-rp2350        examples/blinky1
 	@$(MD5SUM) test.hex
+
+smoketest-boards-nrf-samd::
 	# test pwm
 	$(TINYGO) build -size short -o test.hex -target=itsybitsy-m0        examples/pwm
 	@$(MD5SUM) test.hex
@@ -907,6 +930,8 @@ ifneq ($(STM32), 0)
 	$(TINYGO) build -size short -o test.hex -target=arduino-uno-q       examples/blinkm
 	@$(MD5SUM) test.hex
 endif
+
+smoketest-boards-avr:
 	$(TINYGO) build -size short -o test.hex -target=atmega328pb         examples/blinkm
 	@$(MD5SUM) test.hex
 	$(TINYGO) build -size short -o test.hex -target=atmega1284p         examples/machinetest
@@ -935,6 +960,8 @@ endif
 	@$(MD5SUM) test.hex
 	$(TINYGO) build -size short -o test.hex -target=digispark -gc=leaking examples/blinky1
 	@$(MD5SUM) test.hex
+
+smoketest-boards-esp:
 ifneq ($(XTENSA), 0)
 	$(TINYGO) build -size short -o test.bin -target=esp32-generic       examples/machinetest
 	@$(MD5SUM) test.bin
@@ -1024,6 +1051,8 @@ endif
 	@$(MD5SUM) test.hex
 	$(TINYGO) build -size short -o test.hex -target=hw-651-s110v8       examples/machinetest
 	@$(MD5SUM) test.hex
+
+smoketest-flags-cgo-cross:
 ifneq ($(WASM), 0)
 	$(TINYGO) build -size short -o wasm.wasm -target=wasm               examples/wasm/export
 	$(TINYGO) build -size short -o wasm.wasm -target=wasm               examples/wasm/main
@@ -1067,6 +1096,7 @@ build/release: tinygo gen-device $(if $(filter 1,$(USE_SYSTEM_BINARYEN)),,binary
 	@mkdir -p build/release/tinygo/lib/mingw-w64/mingw-w64-crt/crt
 	@mkdir -p build/release/tinygo/lib/mingw-w64/mingw-w64-crt/math
 	@mkdir -p build/release/tinygo/lib/mingw-w64/mingw-w64-crt/lib-common
+	@mkdir -p build/release/tinygo/lib/mingw-w64/mingw-w64-headers/crt
 	@mkdir -p build/release/tinygo/lib/mingw-w64/mingw-w64-headers/defaults
 	@mkdir -p build/release/tinygo/lib/musl/arch
 	@mkdir -p build/release/tinygo/lib/musl/crt
@@ -1134,7 +1164,7 @@ endif
 	@cp -rp lib/mingw-w64/mingw-w64-crt/math/x86                    build/release/tinygo/lib/mingw-w64/mingw-w64-crt/math
 	@cp -rp lib/mingw-w64/mingw-w64-crt/misc                        build/release/tinygo/lib/mingw-w64/mingw-w64-crt
 	@cp -rp lib/mingw-w64/mingw-w64-crt/stdio                       build/release/tinygo/lib/mingw-w64/mingw-w64-crt
-	@cp -rp lib/mingw-w64/mingw-w64-headers/crt/                    build/release/tinygo/lib/mingw-w64/mingw-w64-headers
+	@cp -rp lib/mingw-w64/mingw-w64-headers/crt/*                   build/release/tinygo/lib/mingw-w64/mingw-w64-headers/crt
 	@cp -rp lib/mingw-w64/mingw-w64-headers/defaults/include        build/release/tinygo/lib/mingw-w64/mingw-w64-headers/defaults
 	@cp -rp lib/mingw-w64/mingw-w64-headers/include                 build/release/tinygo/lib/mingw-w64/mingw-w64-headers
 	@cp -rp lib/nrfx/*                   build/release/tinygo/lib/nrfx

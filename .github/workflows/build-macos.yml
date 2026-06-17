@@ -98,6 +98,11 @@ jobs:
         run: make release -j3
       - name: Test stdlib packages
         run: make tinygo-test
+      - name: Publish CI test artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: tinygo-darwin-${{ matrix.goarch }}-ci
+          path: build/release.tar.gz
       - name: Make release artifact
         run: cp -p build/release.tar.gz build/tinygo${{ steps.version.outputs.version }}.darwin-${{ matrix.goarch }}.tar.gz
       - name: Publish release artifact
@@ -106,8 +111,63 @@ jobs:
           name: darwin-${{ matrix.goarch }}-double-zipped-${{ steps.version.outputs.version }}
           path: build/tinygo${{ steps.version.outputs.version }}.darwin-${{ matrix.goarch }}.tar.gz
           archive: false
-      - name: Smoke tests
-        run: make smoketest TINYGO=$(PWD)/build/tinygo
+
+  smoketest-shards:
+    name: smoketest-shards
+    runs-on: ubuntu-latest
+    outputs:
+      shards: ${{ steps.list.outputs.shards }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: List smoke test shards
+        id: list
+        run: |
+          shards="$(make --no-print-directory list-smoketest-shards | python3 -c 'import json, sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))')"
+          echo "shards=$shards" >> "$GITHUB_OUTPUT"
+
+  smoketest-macos:
+    name: smoketest-macos
+    needs: [build-macos, smoketest-shards]
+    strategy:
+      fail-fast: false
+      matrix:
+        # macos-14: arm64 (oldest supported version as of 18-11-2025)
+        # macos-15-intel: amd64 (last intel version to be supported by github runners)
+        # See https://github.com/actions/runner-images/issues/13046
+        os: [macos-14, macos-15-intel]
+        shard: ${{ fromJSON(needs.smoketest-shards.outputs.shards) }}
+        include:
+          - os: macos-14
+            goarch: arm64
+          - os: macos-15-intel
+            goarch: amd64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install Dependencies
+        run: |
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install qemu binaryen
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: true
+      - name: Install Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.4'
+          cache: true
+      - name: Download TinyGo build
+        uses: actions/download-artifact@v8
+        with:
+          name: tinygo-darwin-${{ matrix.goarch }}-ci
+          path: build/
+      - name: Extract TinyGo build
+        run: tar -C build -xf build/release.tar.gz
+      - name: Smoke test ${{ matrix.shard }}
+        run: |
+          export TINYGOROOT=$PWD/build/tinygo
+          make ${{ matrix.shard }} TINYGO=$TINYGOROOT/bin/tinygo
+
   test-macos-homebrew:
     name: homebrew-install
     runs-on: macos-latest
